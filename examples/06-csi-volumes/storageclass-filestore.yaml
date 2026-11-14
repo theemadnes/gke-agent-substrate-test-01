@@ -1,0 +1,21 @@
+# Kubernetes StorageClass for Google Cloud Filestore agent volumes.
+# Replace PROJECT_ID, LOCATION, and VOLUME_POOL_NAME with your Filestore
+# volume pool values.
+#
+# Note: Production support for Filestore agent volumes is limited GA.
+# If you installed the Filestore CSI driver with the substrate-gke wizard
+# and passed volume pool flags, this StorageClass may already exist.
+#
+# Usage:
+#   kubectl apply -f examples/06-csi-volumes/storageclass-filestore.yaml
+
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: substrate-volumepool-sc
+provisioner: filestore.csi.storage.gke.io
+parameters:
+  volume-pool: "projects/PROJECT_ID/locations/LOCATION/volumePools/VOLUME_POOL_NAME"
+allowVolumeExpansion: false
+reclaimPolicy: Delete
+volumeBindingMode: Immediate

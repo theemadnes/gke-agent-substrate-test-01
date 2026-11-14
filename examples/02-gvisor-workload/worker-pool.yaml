@@ -1,0 +1,43 @@
+# Namespace and gVisor WorkerPool for Agent Substrate on GKE.
+#
+# Usage:
+#   kubectl apply -f examples/02-gvisor-workload/worker-pool.yaml
+#   kubectl get workerpools -n agent-demo
+#   kubectl ate get workers -n agent-demo
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: agent-demo
+  labels:
+    # Allow pods in this namespace to reach ate-api-server at api.ate-system.svc:443
+    # if an in-cluster orchestrator manages Actors directly.
+    ate.dev/api-access: "true"
+
+---
+
+apiVersion: ate.dev/v1
+kind: WorkerPool
+metadata:
+  name: gvisor-agent-pool
+  namespace: agent-demo
+  labels:
+    # ActorTemplate.workerSelector matches against WorkerPool.metadata.labels.
+    workload: python-agent
+    runtime: gvisor
+spec:
+  replicas: 2
+  workerImage: ghcr.io/agent-substrate/substrate/ateworker-gvisor:v1.0.0
+  # Omitting configRef tracks the cluster default gVisor SandboxConfig (`gvisor-default`).
+  sandboxClasses:
+    - name: gvisor
+  template:
+    # Worker Pod limits establish each Worker's scheduling capacity envelope
+    # shared by the Actors placed on it. Memory requests should match limits.
+    resources:
+      limits:
+        cpu: "2"
+        memory: 2Gi
+      requests:
+        cpu: 500m
+        memory: 2Gi

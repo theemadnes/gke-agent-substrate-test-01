@@ -1,0 +1,79 @@
+# Example in-cluster ingress client Deployment that authenticates to
+# `atenet-router` via a PodCertificate SPIFFE identity and verifies the router's
+# serving certificate against its ClusterTrustBundle.
+#
+# Prerequisites:
+#   Add the client's SPIFFE ID (`spiffe://cluster.local/ns/agent-client/sa/agent-gateway`)
+#   to `ingressAllowedSPIFFEIDs` (`--ingress-allowed-spiffe-ids`) when deploying
+#   Agent Substrate.
+#
+# Usage:
+#   kubectl apply -f examples/05-networking-security/ingress-client-deployment.yaml
+#   kubectl -n agent-client exec deploy/agent-client -- curl --proxytunnel \
+#     --proxy https://atenet-router.ate-system.svc:8444 \
+#     --proxy-cacert /run/router-client/router-ca.pem \
+#     --proxy-cert /run/router-client/credential-bundle.pem \
+#     --proxy-key /run/router-client/credential-bundle.pem \
+#     --proxy-header "ate-target-actor: agent-demo/my-agent-1" \
+#     http://actor-upstream:8888/
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: agent-client
+  labels:
+    # Optional: allow pods in this namespace to call ate-api-server at
+    # api.ate-system.svc:443 directly (not required just for atenet-router).
+    ate.dev/api-access: "true"
+
+---
+
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: agent-gateway
+  namespace: agent-client
+
+---
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agent-client
+  namespace: agent-client
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: agent-client
+  template:
+    metadata:
+      labels:
+        app: agent-client
+    spec:
+      serviceAccountName: agent-gateway
+      containers:
+        - name: client
+          image: curlimages/curl:8.11.1
+          command: ["sleep", "infinity"]
+          volumeMounts:
+            - name: router-client
+              mountPath: /run/router-client
+              readOnly: true
+      volumes:
+        - name: router-client
+          projected:
+            sources:
+              # Client mTLS certificate with SPIFFE ID:
+              # spiffe://cluster.local/ns/agent-client/sa/agent-gateway
+              - podCertificate:
+                  signerName: podidentity.podcert.ate.dev/identity
+                  keyType: ECDSAP256
+                  credentialBundlePath: credential-bundle.pem
+              # Serving CA bundle for atenet-router.ate-system.svc
+              - clusterTrustBundle:
+                  signerName: servicedns.podcert.ate.dev/identity
+                  labelSelector:
+                    matchLabels:
+                      podcert.ate.dev/canarying: live
+                  path: router-ca.pem

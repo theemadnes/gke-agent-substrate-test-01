@@ -1,0 +1,55 @@
+# ActorTemplate that attaches a dynamically provisioned external CSI volume
+# (for example, a Filestore agent volume) per Actor.
+#
+# Prerequisites:
+#   External CSI volumes are gated behind the `ExternalVolumes` preview feature.
+#   1. Enable `--preview=ExternalVolumes` on ate-api-server (or `preview: ExternalVolumes`
+#      in SubstrateInstall).
+#   2. Pass `--preview` when creating the ActorTemplate and Actors:
+#        kubectl ate --preview create actor-template -f examples/06-csi-volumes/actor-template-csi.yaml
+#        kubectl ate --preview create actor my-csi-agent -a agent-demo --template python-agent-csi
+
+metadata:
+  atespace: agent-demo
+  name: python-agent-csi
+
+workerSelector:
+  matchLabels:
+    workload: python-agent
+    runtime: gvisor
+
+containers:
+  - name: python-runtime
+    image: registry.k8s.io/agent-sandbox/python-runtime-sandbox:v0.5.6@sha256:147a6a7f3b382683a065e4519b22088e75472317ce861d57031537a758836ab5
+    command:
+      - uvicorn
+      - main:app
+      - --app-dir
+      - /app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8888"
+    wakeupProbe:
+      httpGet:
+        path: /
+        port: 8888
+      timeoutSeconds: 30
+    volumeMounts:
+      - name: shared-workspace
+        mountPath: /mnt/workspace
+
+resources:
+  limits:
+    cpuMillicores: 1000
+    memoryBytes: 536870912 # 512 MiB
+
+snapshotConfig:
+  preferredFidelity: SNAPSHOT_FIDELITY_VOLUMES
+
+volumes:
+  - name: shared-workspace
+    external:
+      template:
+        capacityBytes: 5368709120 # 5 GiB
+        storageClassName: substrate-volumepool-sc

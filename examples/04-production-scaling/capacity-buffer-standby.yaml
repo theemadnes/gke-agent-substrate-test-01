@@ -1,0 +1,52 @@
+# Standby CapacityBuffer using a PodTemplate so GKE keeps prewarmed,
+# suspended worker nodes ready for burst scale-up.
+#
+# Why PodTemplate instead of `scalableRef`:
+#   - CapacityBuffer cannot resolve a 0-replica `WorkerPool` custom resource.
+#   - MicroVM Worker Deployments request `ate.dev/kvm: 1`, which prevents GKE
+#     node auto-provisioning from scaling out an empty pool. Using a placeholder
+#     PodTemplate omits `ate.dev/kvm` while matching the Worker Pod's CPU/memory
+#     requests and ComputeClass `nodeSelector`.
+#
+# Important: Ensure the `atelet` DaemonSet tolerates
+# `buffer.gke.io/standby-capacity-node-suspended` (`operator: "Exists"`), and
+# replace `agent-microvm-demo` / `substrate-microvm` with your values.
+#
+# Usage:
+#   kubectl apply -f examples/04-production-scaling/capacity-buffer-standby.yaml
+
+apiVersion: v1
+kind: PodTemplate
+metadata:
+  name: substrate-worker-buffer-template
+  namespace: agent-microvm-demo
+template:
+  spec:
+    nodeSelector:
+      cloud.google.com/compute-class: substrate-microvm
+    containers:
+      - name: buffer-placeholder
+        image: registry.k8s.io/pause:3.9
+        resources:
+          requests:
+            # Match one Worker Pod's requests (leaving room on a 4-vCPU node
+            # for atelet and GKE system daemons) so 1 replica == 1 node.
+            cpu: "2"
+            memory: 4Gi
+
+---
+
+apiVersion: autoscaling.x-k8s.io/v1beta1
+kind: CapacityBuffer
+metadata:
+  name: substrate-standby-buffer
+  namespace: agent-microvm-demo
+  annotations:
+    # Time window for atelet to initialize and prewarm sandbox assets on disk
+    # before GKE suspends the standby node.
+    buffer.gke.io/standby-capacity-init-time: "5m"
+spec:
+  podTemplateRef:
+    name: substrate-worker-buffer-template
+  replicas: 2
+  provisioningStrategy: buffer.gke.io/standby-capacity

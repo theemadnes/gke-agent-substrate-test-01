@@ -1,0 +1,18 @@
+# GKE node system configuration for high-density Agent Substrate worker nodes.
+# Required when running more than ~800 concurrent sandboxes per node so
+# inotify watches and ARP neighbor caches do not exhaust kernel defaults.
+#
+# Usage when creating a GKE node pool:
+#   gcloud container node-pools create substrate-workers \
+#     --cluster=CLUSTER_NAME \
+#     --location=LOCATION \
+#     --machine-type=c3-standard-4 \
+#     --system-config-from-file=examples/01-cluster-infra/system-config.yaml
+
+linuxConfig:
+  sysctl:
+    fs.inotify.max_user_instances: "65536"
+    fs.inotify.max_user_watches: "1048576"
+    net.ipv4.neigh.default.gc_thresh1: "4096"
+    net.ipv4.neigh.default.gc_thresh2: "16384"
+    net.ipv4.neigh.default.gc_thresh3: "32768"

@@ -1,0 +1,52 @@
+# ActorTemplate (protojson-shaped ateapi.ActorTemplate) targeting the microVM
+# WorkerPool via `workerSelector`.
+#
+# Usage:
+#   kubectl ate create atespace agent-microvm-demo
+#   kubectl ate create actor-template -f examples/03-microvm-workload/actor-template-microvm.yaml
+
+metadata:
+  atespace: agent-microvm-demo
+  name: python-agent-microvm
+
+# Pin to the microVM WorkerPool so Actors never mix across sandbox runtimes.
+workerSelector:
+  matchLabels:
+    workload: python-agent
+    runtime: microvm
+
+containers:
+  - name: python-runtime
+    image: registry.k8s.io/agent-sandbox/python-runtime-sandbox:v0.5.6@sha256:147a6a7f3b382683a065e4519b22088e75472317ce861d57031537a758836ab5
+    command:
+      - uvicorn
+      - main:app
+      - --app-dir
+      - /app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8888"
+    wakeupProbe:
+      httpGet:
+        path: /
+        port: 8888
+      # MicroVM guest boot can take longer than gVisor on cold start.
+      timeoutSeconds: 120
+    volumeMounts:
+      - name: workspace
+        mountPath: /data
+
+# For microVM Actors, memoryBytes sets guest RAM (minimum 128 MiB) and
+# cpuMillicores sets vCPUs (rounded up to whole vCPUs, minimum 1).
+resources:
+  limits:
+    cpuMillicores: 1000
+    memoryBytes: 536870912 # 512 MiB
+
+snapshotConfig:
+  preferredFidelity: SNAPSHOT_FIDELITY_MEMORY
+
+volumes:
+  - name: workspace
+    durableDir: {}

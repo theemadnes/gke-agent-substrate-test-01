@@ -1,0 +1,76 @@
+# Declarative configuration for installing Agent Substrate on GKE via `ate-setup`.
+# Usage:
+#   ate-setup deploy ate-system --config examples/00-install/substrate-install.yaml
+#
+# Note: On GKE, provision GCP prerequisites (cluster, buckets, IAM, dashboards)
+# first with `ai-on-gke/substrate-gke` (`tools/setup-gcp bootstrap`), or configure
+# equivalent resources manually. See README.md for details.
+
+apiVersion: install.ate.dev/v1alpha1
+kind: SubstrateInstall
+
+# Target namespace and kubeconfig context.
+namespace: ate-system
+context: gke_PROJECT_ID_ZONE_CLUSTER_NAME
+
+# Coarse sizing tier for control-plane components (`size0` for dev/eval, `size10`
+# for larger clusters with dedicated PostgreSQL node).
+clusterSize: size0
+
+# Per-workload readiness timeout.
+rolloutTimeout: 5m0s
+
+# Place PostgreSQL and system control-plane pods onto dedicated labeled/tainted
+# node pools (`ate.dev/workloadType=ate-postgres` and `ate-system-infra`).
+# Set to false for single-pool dev/evaluation clusters.
+cordonSystemInfraComponents: false
+
+# Ingress/egress dataplane (`envoy` is the supported dataplane on GKE).
+atenet:
+  dataplane: envoy
+  egress:
+    # Enable the bundled Kubernetes Secrets credential provider for egress
+    # credential injection (`{"enabled":false}` disables it).
+    credentialProvider: '{"name":"k8s.io"}'
+
+# SPIFFE IDs permitted to connect through atenet-router.
+# Include `ate-system/atenet-client` for `kubectl ate proxy actor`, plus any
+# in-cluster frontend/gateway ServiceAccounts.
+ingressAllowedSPIFFEIDs:
+  - spiffe://cluster.local/ns/ate-system/sa/atenet-client
+  - spiffe://cluster.local/ns/agent-client/sa/agent-gateway
+
+# Use published release images from GitHub Container Registry.
+# Omit `images` and set `ko.dockerRepo` if building from source instead.
+images:
+  repo: ghcr.io/agent-substrate/substrate
+  tag: v1.0.0
+
+# Sandbox classes to configure (`gvisor` always installs gvisor-default;
+# include `microvm` to stage Cloud Hypervisor / Kata assets to GCS).
+sandboxClasses:
+  - gvisor
+  - microvm
+
+# GKE snapshot storage and Workload Identity transfer service account.
+gcp:
+  projectID: PROJECT_ID
+  clusterName: CLUSTER_NAME
+  clusterLocation: ZONE
+
+storage:
+  bucketName: SNAPSHOT_BUCKET_NAME
+  snapshotLocation: gs://SNAPSHOT_BUCKET_NAME/
+  transferGSAName: ate-snapshot-transfer
+
+# Optional: Enable preview features when needed (for example, ExternalVolumes
+# for CSI volumes or PerTemplateSnapshotLocation).
+# preview: ExternalVolumes
+
+# Optional: External database (Cloud SQL) settings. Supply the connection string
+# via `export ATE_API_POSTGRES_READ_WRITE_CONNECTION_STRING=...` rather than
+# committing credentials to this file.
+# ateapi:
+#   postgres:
+#     schema: public
+#     poolMaxConns: 25

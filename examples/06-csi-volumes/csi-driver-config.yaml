@@ -1,0 +1,22 @@
+# CSIDriverConfig bridging the Kubernetes StorageClass provisioner
+# (`filestore.csi.storage.gke.io`) to the Filestore CSI driver gRPC endpoint.
+#
+# Note: Substrate v1.0.0 serves `ate.dev/v1` (replaces `ate.dev/v1alpha1`).
+# If you installed the Filestore CSI driver via the substrate-gke installer,
+# this resource is registered automatically.
+#
+# Usage:
+#   kubectl apply -f examples/06-csi-volumes/csi-driver-config.yaml
+
+apiVersion: ate.dev/v1
+kind: CSIDriverConfig
+metadata:
+  name: filestore.csi.storage.gke.io
+spec:
+  driverName: filestore.csi.storage.gke.io
+  controllerEndpoint: tcp://csi-filestore-controller.gcp-filestore-csi-driver.svc:10000
+  nodeSocketOverride: unix:///var/lib/kubelet/plugins/filestore.csi.storage.gke.io/csi.sock
+  tls:
+    enabled: true
+    usePodIdentity: true
+    serverName: csi-filestore-controller.gcp-filestore-csi-driver.svc

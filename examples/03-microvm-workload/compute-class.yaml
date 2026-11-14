@@ -1,0 +1,25 @@
+# GKE ComputeClass for scaling microVM WorkerPools from zero nodes using
+# pre-created nested-virtualization node pools.
+#
+# Pre-create the pools at 0 nodes with `--enable-nested-virtualization`,
+# `--system-config-from-file=examples/01-cluster-infra/system-config.yaml`,
+# and the `clusterautoscaler-nodetemplate-resources.ate.dev/kvm=4096` label
+# so GKE Cluster Autoscaler knows the empty pool provides `ate.dev/kvm`.
+# See README.md for the exact `gcloud container node-pools create` commands.
+#
+# Usage:
+#   kubectl apply -f examples/03-microvm-workload/compute-class.yaml
+
+apiVersion: cloud.google.com/v1
+kind: ComputeClass
+metadata:
+  name: substrate-microvm-zero
+spec:
+  nodePoolAutoCreation:
+    enabled: false
+  priorities:
+    - nodepools:
+        - microvm-n4-pool
+    - nodepools:
+        - microvm-c3-pool
+  whenUnsatisfiable: DoNotScaleUp

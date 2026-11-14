@@ -1,0 +1,55 @@
+# ActorTemplate (protojson-shaped ateapi.ActorTemplate) for a stateful Python
+# runtime sandbox running on the gVisor WorkerPool.
+#
+# Note: ActorTemplate is a Substrate API resource (stored in PostgreSQL), NOT a
+# Kubernetes CRD. Create the atespace first, then apply with `kubectl ate`:
+#   kubectl ate create atespace agent-demo
+#   kubectl ate create actor-template -f examples/02-gvisor-workload/actor-template.yaml
+
+metadata:
+  atespace: agent-demo
+  name: python-agent-template
+
+# Selects WorkerPools by matching WorkerPool.metadata.labels.
+workerSelector:
+  matchLabels:
+    workload: python-agent
+    runtime: gvisor
+
+containers:
+  - name: python-runtime
+    # Container images in ActorTemplates MUST include a @sha256:... digest.
+    image: registry.k8s.io/agent-sandbox/python-runtime-sandbox:v0.5.6@sha256:147a6a7f3b382683a065e4519b22088e75472317ce861d57031537a758836ab5
+    command:
+      - uvicorn
+      - main:app
+      - --app-dir
+      - /app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8888"
+    # One-shot HTTP gate on each wakeup: ResumeActor blocks until this returns 200.
+    wakeupProbe:
+      httpGet:
+        path: /
+        port: 8888
+      timeoutSeconds: 30
+    volumeMounts:
+      - name: workspace
+        mountPath: /data
+
+# Sandbox-level compute limits (required: both cpuMillicores and memoryBytes).
+# Must fit within the target WorkerPool's remaining capacity.
+resources:
+  limits:
+    cpuMillicores: 1000
+    memoryBytes: 536870912 # 512 MiB
+
+# Capture process memory, rootfs writes, and durable volumes across suspends.
+snapshotConfig:
+  preferredFidelity: SNAPSHOT_FIDELITY_MEMORY
+
+volumes:
+  - name: workspace
+    durableDir: {}

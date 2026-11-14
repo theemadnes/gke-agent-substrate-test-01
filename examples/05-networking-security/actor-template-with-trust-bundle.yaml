@@ -1,0 +1,73 @@
+# ActorTemplate that projects the Substrate egress MITM CA bundle and system
+# root CAs into the sandbox so the Actor trusts HTTPS connections mediated by
+# `atenet-egress`, plus `actorMetadata` identity files.
+#
+# Usage:
+#   kubectl ate create atespace agent-demo
+#   kubectl ate create actor-template -f examples/05-networking-security/actor-template-with-trust-bundle.yaml
+
+metadata:
+  atespace: agent-demo
+  name: python-agent-with-egress-trust
+
+workerSelector:
+  matchLabels:
+    workload: python-agent
+    runtime: gvisor
+
+containers:
+  - name: python-runtime
+    image: registry.k8s.io/agent-sandbox/python-runtime-sandbox:v0.5.6@sha256:147a6a7f3b382683a065e4519b22088e75472317ce861d57031537a758836ab5
+    command:
+      - uvicorn
+      - main:app
+      - --app-dir
+      - /app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8888"
+    env:
+      # Standard OpenSSL / Python / Go CA bundle path overrides
+      - name: SSL_CERT_FILE
+        value: /run/ate/certs/ca-bundle.pem
+      - name: REQUESTS_CA_BUNDLE
+        value: /run/ate/certs/ca-bundle.pem
+    wakeupProbe:
+      httpGet:
+        path: /
+        port: 8888
+      timeoutSeconds: 30
+    volumeMounts:
+      - name: system-info
+        mountPath: /run/ate
+      - name: workspace
+        mountPath: /data
+
+resources:
+  limits:
+    cpuMillicores: 1000
+    memoryBytes: 536870912 # 512 MiB
+
+snapshotConfig:
+  preferredFidelity: SNAPSHOT_FIDELITY_MEMORY
+
+volumes:
+  - name: workspace
+    durableDir: {}
+  - name: system-info
+    systemInfo:
+      dataSources:
+        - actorMetadata:
+            items:
+              - field: ACTOR_METADATA_FIELD_NAME
+                path: actor-name
+              - field: ACTOR_METADATA_FIELD_ATESPACE
+                path: atespace
+              - field: ACTOR_METADATA_FIELD_UID
+                path: actor-uid
+        - trustBundle:
+            names:
+              - egress-mitm.ate.dev
+              - system-roots.ate.dev
+            path: certs/ca-bundle.pem

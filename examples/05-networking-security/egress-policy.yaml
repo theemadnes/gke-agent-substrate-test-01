@@ -1,0 +1,43 @@
+# EgressPolicy for an Actor (default-deny outside these rules).
+# Allows outbound HTTPS to approved model/API endpoints and injects a
+# Kubernetes Secret credential into `Authorization` without ever placing the
+# secret inside the sandbox.
+#
+# Prerequisites:
+#   1. Deploy atenet-egress with `--credential-provider='{"name":"k8s.io"}'`
+#   2. Grant the Actor's atespace access to the Secret's namespace in the
+#      `k8s-credential-provider-namespace-policy` ConfigMap in `ate-system`,
+#      then restart `deployment/k8s-credential-provider`.
+#
+# Usage:
+#   kubectl ate create egress-policy my-agent-1 -a agent-demo \
+#     -f examples/05-networking-security/egress-policy.yaml
+
+rules:
+  # Allow HTTPS to an LLM API and replace placeholder Authorization header
+  # with the Kubernetes Secret `ns1/llm-api-key` key `token`.
+  - https:
+      hostnames:
+        - generativelanguage.googleapis.com
+      ports:
+        numbers: [443]
+      effects:
+        replaceHeaders:
+          - header: x-goog-api-key
+            prefix: ""
+            credentialUri: ate-secret://k8s.io/default/ns1/llm-api-key/token
+
+  # Allow HTTPS to an internal service with an auto-minted Actor JWT.
+  - https:
+      hostnames:
+        - internal-tools.example.com
+      ports:
+        numbers: [443]
+      effects:
+        replaceHeaders:
+          - header: Authorization
+            prefix: "Bearer "
+            actorJwt:
+              audiences:
+                - https://internal-tools.example.com
+              expirationSeconds: 900

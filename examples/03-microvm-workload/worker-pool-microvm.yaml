@@ -1,0 +1,46 @@
+# Namespace and microVM (Cloud Hypervisor + Kata) WorkerPool on GKE.
+#
+# Prerequisites:
+#   1. The cluster must have the `microvm` SandboxConfig installed (done by
+#      selecting Micro-VM in substrate-gke or `--sandbox-classes=gvisor,microvm`).
+#   2. Worker nodes must expose `/dev/kvm` (nested virtualization enabled or
+#      x86 bare-metal machine type).
+#
+# Usage:
+#   kubectl apply -f examples/03-microvm-workload/worker-pool-microvm.yaml
+#   kubectl get workerpools -n agent-microvm-demo
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: agent-microvm-demo
+
+---
+
+apiVersion: ate.dev/v1
+kind: WorkerPool
+metadata:
+  name: microvm-agent-pool
+  namespace: agent-microvm-demo
+  labels:
+    workload: python-agent
+    runtime: microvm
+spec:
+  replicas: 2
+  workerImage: ghcr.io/agent-substrate/substrate/ateworker-microvm:v1.0.0
+  sandboxClasses:
+    - name: microvm
+      configRef:
+        name: microvm
+  template:
+    # Target the pre-created nested-virtualization ComputeClass.
+    # Remove nodeSelector if using a single cluster-wide nested-virt node pool.
+    nodeSelector:
+      cloud.google.com/compute-class: substrate-microvm-zero
+    resources:
+      limits:
+        cpu: "2"
+        memory: 2Gi
+      requests:
+        cpu: 500m
+        memory: 2Gi
